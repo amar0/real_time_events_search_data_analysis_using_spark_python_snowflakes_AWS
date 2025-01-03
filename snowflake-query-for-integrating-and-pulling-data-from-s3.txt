@@ -1,0 +1,66 @@
+//CREATE DB
+CREATE DATABASE REAL_TIME_EVENTS_DATA;
+
+//CONNECTION BETWEEN SNOWFLAKE AND S3
+CREATE OR REPLACE STORAGE INTEGRATION S3_INIT
+    TYPE = EXTERNAL_STAGE
+    STORAGE_PROVIDER = S3
+    ENABLED = TRUE
+    STORAGE_AWS_ROLE_ARN = 'arn:aws:iam::533267016810:role/google-data-spark-snowflake-role'
+    STORAGE_ALLOWED_LOCATIONS = ('s3://real-time-events-search-amar/')
+    COMMENT = 'Creating connection to s3'
+
+DESC INTEGRATION S3_INIT;
+
+//CREATE FILE FORMAT OBJECT
+CREATE OR REPLACE FILE FORMAT csv_fileformat
+    TYPE = CSV
+    FIELD_DELIMITER = ','
+    SKIP_HEADER = 1
+    null_if = ('NULL','null')
+    empty_field_as_null = TRUE;
+
+//CREATE STAGE OBJECT
+CREATE OR REPLACE STAGE REAL_TIME_EVENTS_DATA_STAGE
+    URL = 's3://real-time-events-search-amar/transformed_data/'
+    STORAGE_INTEGRATION = S3_INIT
+    FILE_FORMAT = csv_fileformat;
+
+LIST @REAL_TIME_EVENTS_DATA_STAGE;
+
+//CREATE TABLE FOR REAL TIME EVENTS AND DEFINE THE SCHEMA
+CREATE OR REPLACE TABLE tbl_real_time_events (
+    event_id STRING,
+    name STRING,
+    description STRING,
+    start_time STRING,
+    venue_full_address STRING,
+    venue_name STRING,
+    venue_phone_number STRING,
+    event_link STRING
+)
+
+drop table tbl_real_time_events;
+
+alter table tbl_real_time_events 
+alter column start_time STRING;
+
+DESC TABLE tbl_real_time_events;
+
+//INSERT DATA FROM s3 FILES
+COPY INTO tbl_real_time_events
+FROM @REAL_TIME_EVENTS_DATA_STAGE/transformed_data_2025-01-03_10-27-01/run-1735900021830-part-r-00001;
+
+SELECT * FROM tbl_real_time_events;
+
+
+--CREATING SNOWPIPE FOR AUTOMATING THE PROCESS--
+CREATE OR REPLACE SCHEMA pipe;
+
+CREATE OR REPLACE PIPE tbl_google_data_pipe
+auto_ingest = TRUE
+AS
+COPY INTO tbl_google_data
+FROM @google_data_stage/maps_data/;
+
+DESC pipe tbl_google_data_pipe;
